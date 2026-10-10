@@ -1,0 +1,57 @@
+#  Copyright (c) 2026, REG-Linux contributors.
+#  SPDX-License-Identifier: GPL-3.0-or-later
+
+## TEST ONLY: Qualcomm stand-in services so LinuxLoader.efi runs under QEMU/AAVMF.
+[Defines]
+  INF_VERSION    = 0x00010005
+  BASE_NAME      = QemuQcomShim
+  FILE_GUID      = 3d0b6a4e-9c1f-4f7d-8b2e-5a6c7d8e9f01
+  MODULE_TYPE    = UEFI_APPLICATION
+  VERSION_STRING = 1.0
+  ENTRY_POINT    = QemuQcomShimEntry
+
+[Sources]
+  QemuQcomShim.c
+
+[Packages]
+  MdePkg/MdePkg.dec
+  MdeModulePkg/MdeModulePkg.dec
+  QcomModulePkg/QcomModulePkg.dec
+
+[LibraryClasses]
+  UefiApplicationEntryPoint
+  UefiLib
+  BaseLib
+  BaseMemoryLibOptDxe
+  MemoryAllocationLib
+  DevicePathLib
+  UefiBootServicesTableLib
+  UefiRuntimeServicesTableLib
+  DebugLib
+  StackCanary
+  BootLib
+
+[Protocols]
+  gEfiPartitionRecordGuid
+  gEfiLoadedImageProtocolGuid
+  gEfiBlockIoProtocolGuid
+  gEfiDevicePathProtocolGuid
+  gEfiPartitionInfoProtocolGuid
+  gEfiChipInfoProtocolGuid
+  gEfiPlatformInfoProtocolGuid
+  gEfiRamPartitionProtocolGuid
+  gQcomPmicVersionProtocolGuid
+  gEfiMemCardInfoProtocolGuid
+  gEfiResetReasonProtocolGuid
+  gEfiQcomVerifiedBootProtocolGuid
+  gQcomScmProtocolGuid
+  gEfiSimpleFileSystemProtocolGuid
+  gEfiHash2ProtocolGuid
+  gQcomQseecomProtocolGuid
+
+[Guids]
+  gEfiEmmcUserPartitionGuid
+  gBootModeVariableGuid
+  gQcomTokenSpaceGuid
+  gEfiUfsLU0Guid
+  gEfiPartitionTypeGuid

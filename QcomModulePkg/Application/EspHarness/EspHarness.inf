@@ -1,0 +1,33 @@
+#  Copyright (c) 2026, REG-Linux contributors.
+#  SPDX-License-Identifier: GPL-3.0-or-later
+
+[Defines]
+  INF_VERSION    = 0x00010005
+  BASE_NAME      = EspHarness
+  FILE_GUID      = 6f2a1c0e-3b5d-4e8a-9c71-2d4f8b9a0e13
+  MODULE_TYPE    = UEFI_APPLICATION
+  VERSION_STRING = 1.0
+  ENTRY_POINT    = EspHarnessMain
+
+[Sources]
+  EspHarness.c
+
+[Packages]
+  MdePkg/MdePkg.dec
+  MdeModulePkg/MdeModulePkg.dec
+  ArmPkg/ArmPkg.dec
+  EmbeddedPkg/EmbeddedPkg.dec
+  QcomModulePkg/QcomModulePkg.dec
+
+[LibraryClasses]
+  UefiApplicationEntryPoint
+  UefiLib
+  MemoryAllocationLib
+  UefiBootServicesTableLib
+  BaseLib
+  BootLib
+  FastbootLib
+
+[Protocols]
+  gEfiLoadedImageProtocolGuid
+  gEfiComponentName2ProtocolGuid

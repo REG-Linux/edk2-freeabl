@@ -257,6 +257,60 @@
 ################################################################################
 [Components.common]
 
+!if $(ESP_HARNESS) == TRUE
+	QcomModulePkg/Application/QemuQcomShim/QemuQcomShim.inf {
+		<LibraryClasses>
+			DxeServicesTableLib|MdePkg/Library/DxeServicesTableLib/DxeServicesTableLib.inf
+			UefiLib|MdePkg/Library/UefiLib/UefiLib.inf
+			UefiApplicationEntryPoint|MdePkg/Library/UefiApplicationEntryPoint/UefiApplicationEntryPoint.inf
+			CacheMaintenanceLib|ArmPkg/Library/ArmCacheMaintenanceLib/ArmCacheMaintenanceLib.inf
+			Zlib|QcomModulePkg/Library/zlib/zlib.inf
+			ArmLib|ArmPkg/Library/ArmLib/ArmBaseLib.inf
+			BaseLib|MdePkg/Library/BaseLib/BaseLib.inf
+			DevicePathLib|MdePkg/Library/UefiDevicePathLib/UefiDevicePathLib.inf
+			HobLib|MdePkg/Library/DxeHobLib/DxeHobLib.inf
+			PerformanceLib|MdeModulePkg/Library/DxePerformanceLib/DxePerformanceLib.inf
+			DebugPrintErrorLevelLib|MdePkg/Library/BaseDebugPrintErrorLevelLib/BaseDebugPrintErrorLevelLib.inf
+
+			FdtLib|EmbeddedPkg/Library/FdtLib/FdtLib.inf
+			LibUfdt|EmbeddedPkg/Library/LibUfdt/LibUfdt.inf
+			ArmSmcLib|ArmPkg/Library/ArmSmcLib/ArmSmcLib.inf
+			BootLib|QcomModulePkg/Library/BootLib/BootLib.inf
+			StackCanary|QcomModulePkg/Library/StackCanary/StackCanary.inf
+			FastbootLib|QcomModulePkg/Library/FastbootLib/FastbootLib.inf
+			AvbLib|QcomModulePkg/Library/avb/AvbLib.inf
+			OpenDice|QcomModulePkg/Library/OpenDice/open-dice.inf
+			AesLib|QcomModulePkg/Library/aes/AesLib.inf
+			UbsanLib|QcomModulePkg/Library/UbsanLib/UbsanLib.inf
+			Lz4Lib|QcomModulePkg/Library/lz4/lib/Lz4Lib.inf
+	}
+	QcomModulePkg/Application/EspHarness/EspHarness.inf {
+		<LibraryClasses>
+			DxeServicesTableLib|MdePkg/Library/DxeServicesTableLib/DxeServicesTableLib.inf
+			UefiLib|MdePkg/Library/UefiLib/UefiLib.inf
+			UefiApplicationEntryPoint|MdePkg/Library/UefiApplicationEntryPoint/UefiApplicationEntryPoint.inf
+			CacheMaintenanceLib|ArmPkg/Library/ArmCacheMaintenanceLib/ArmCacheMaintenanceLib.inf
+			Zlib|QcomModulePkg/Library/zlib/zlib.inf
+			ArmLib|ArmPkg/Library/ArmLib/ArmBaseLib.inf
+			BaseLib|MdePkg/Library/BaseLib/BaseLib.inf
+			DevicePathLib|MdePkg/Library/UefiDevicePathLib/UefiDevicePathLib.inf
+			HobLib|MdePkg/Library/DxeHobLib/DxeHobLib.inf
+			PerformanceLib|MdeModulePkg/Library/DxePerformanceLib/DxePerformanceLib.inf
+			DebugPrintErrorLevelLib|MdePkg/Library/BaseDebugPrintErrorLevelLib/BaseDebugPrintErrorLevelLib.inf
+
+			FdtLib|EmbeddedPkg/Library/FdtLib/FdtLib.inf
+			LibUfdt|EmbeddedPkg/Library/LibUfdt/LibUfdt.inf
+			ArmSmcLib|ArmPkg/Library/ArmSmcLib/ArmSmcLib.inf
+			BootLib|QcomModulePkg/Library/BootLib/BootLib.inf
+			StackCanary|QcomModulePkg/Library/StackCanary/StackCanary.inf
+			FastbootLib|QcomModulePkg/Library/FastbootLib/FastbootLib.inf
+			AvbLib|QcomModulePkg/Library/avb/AvbLib.inf
+			OpenDice|QcomModulePkg/Library/OpenDice/open-dice.inf
+			AesLib|QcomModulePkg/Library/aes/AesLib.inf
+			UbsanLib|QcomModulePkg/Library/UbsanLib/UbsanLib.inf
+			Lz4Lib|QcomModulePkg/Library/lz4/lib/Lz4Lib.inf
+	}
+!endif
 	QcomModulePkg/Application/LinuxLoader/LinuxLoader.inf {
 		<LibraryClasses>
 			DxeServicesTableLib|MdePkg/Library/DxeServicesTableLib/DxeServicesTableLib.inf
