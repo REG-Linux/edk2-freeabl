@@ -30,6 +30,7 @@
  * Changes from Qualcomm Innovation Center are provided under the following license:
  *
  * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Modified for FreeABL, 2026 (see FREEABL.md).
  *
  *  Redistribution and use in source and binary forms, with or without
  *  modification, are permitted (subject to the limitations in the
@@ -72,6 +73,7 @@
 #include <Library/DebugLib.h>
 #include <Library/Debug.h>
 #include <Library/UefiLib.h>
+#include <Library/ArmSmcLib.h>
 
 #define HYP_DISABLE_UART_LOGGING    0x86000000
 
@@ -86,6 +88,16 @@ BOOLEAN IsVmEnabled (VOID)
 VOID SetVmDisable (VOID)
 {
   VmEnabled = FALSE;
+}
+
+/* Restored from CLO uefi.lnx.4.0: ask the hypervisor to stop logging on the
+   UART before the kernel takes it over (needed on SM8550 / kalama). */
+VOID DisableHypUartUsageForLogging (VOID)
+{
+  ARM_SMC_ARGS ArmSmcArgs;
+
+  ArmSmcArgs.Arg0 = HYP_DISABLE_UART_LOGGING;
+  ArmCallSmc (&ArmSmcArgs);
 }
 
 HypBootInfo *GetVmData (VOID)

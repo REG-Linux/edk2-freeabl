@@ -105,6 +105,17 @@
   ExtractGuidedSectionLib|MdePkg/Library/DxeExtractGuidedSectionLib/DxeExtractGuidedSectionLib.inf
 
 [BuildOptions.common]
+!if $(QEMU_TEST) == TRUE
+  GCC:*_*_*_CC_FLAGS = -DESP_DEBUG_CONOUT
+!endif
+!if $(ESP_DEBUG_SCREEN) == TRUE
+  # Debug ABL for the device: DEBUG() messages also go to the screen, and a
+  # pause before the kernel jump (not in QEMU_TEST builds).
+  GCC:*_*_*_CC_FLAGS = -DESP_DEBUG_CONOUT -DESP_DEBUG_PAUSE
+!endif
+!if $(ESP_DISPLAY_OFF) == TRUE
+  GCC:*_*_*_CC_FLAGS = -DESP_DISPLAY_OFF_AT_EBS
+!endif
   GCC:*_*_*_ARCHCC_FLAGS  = -Wno-shift-negative-value -fstack-protector-all -Wno-varargs -fno-common -Wno-misleading-indentation -Wno-unknown-warning-option
   GCC:*_*_*_DLINK_FLAGS = -Wl,-Ttext=0x0
   GCC:*_*_*_CC_FLAGS = -DZ_SOLO

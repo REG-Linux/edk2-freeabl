@@ -19,6 +19,7 @@ found at
  * All rights reserved.
  *
  * Copyright (c) 2015 - 2021, The Linux Foundation. All rights reserved.
+ * Modified for FreeABL, 2026 (see FREEABL.md).
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -123,6 +124,8 @@ found at
 #include "MetaFormat.h"
 #include "SparseFormat.h"
 #include "Recovery.h"
+#include <Library/EspFeatures.h>
+#include <Library/EspLog.h>
 
 STATIC struct GetVarPartitionInfo part_info[] = {
     {"system", "partition-size:", "partition-type:", "", "ext4"},
@@ -3925,6 +3928,230 @@ Exit:
  * and partitiion sizes. base and size are the respective parameters
  * to the Fastboot Buffer used to store the downloaded image for flashing
  */
+
+/* ESP OEM fastboot command handlers */
+
+STATIC VOID
+CmdOemSetGpuPreemption (CONST CHAR8 *Arg, VOID *Data, UINT32 Size)
+{
+  while (*Arg == ' ') Arg++;
+  if (*Arg == '1') {
+    SetGpuPreemption (TRUE);
+    FastbootOkay ("");
+  } else if (*Arg == '0') {
+    SetGpuPreemption (FALSE);
+    FastbootOkay ("");
+  } else {
+    FastbootFail ("Usage: oem set-gpu-preemption <0|1>");
+  }
+}
+
+STATIC VOID
+CmdOemSetHwFence (CONST CHAR8 *Arg, VOID *Data, UINT32 Size)
+{
+  while (*Arg == ' ') Arg++;
+  if (*Arg == '1') {
+    SetHwFenceEnable (TRUE);
+    FastbootOkay ("");
+  } else if (*Arg == '0') {
+    SetHwFenceEnable (FALSE);
+    FastbootOkay ("");
+  } else {
+    FastbootFail ("Usage: oem set-hw-fence-value <0|1>");
+  }
+}
+
+STATIC VOID
+CmdOemAudioFramework (CONST CHAR8 *Arg, VOID *Data, UINT32 Size)
+{
+  while (*Arg == ' ') Arg++;
+  if (AsciiStrLen (Arg) > 0 && AsciiStrLen (Arg) < 32) {
+    SetAudioFramework (Arg);
+    FastbootOkay ("");
+  } else {
+    FastbootFail ("Usage: oem audio-framework <value>");
+  }
+}
+
+
+
+/* fastboot oem esp-blkio: list every BlockIo device the firmware exposes
+   (device path, removable flag, size) - shows whether the SD card exists. */
+STATIC VOID
+CmdOemEspBlkio (CONST CHAR8 *Arg, VOID *Data, UINT32 Size)
+{
+  EFI_HANDLE                *Handles = NULL;
+  UINTN                     Count = 0;
+  UINTN                     i;
+  EFI_BLOCK_IO_PROTOCOL     *Bio;
+  EFI_DEVICE_PATH_PROTOCOL  *Dp;
+  CHAR16                    *Text;
+  CHAR8                     Line[MAX_RSP_SIZE - 5];
+  UINTN                     Off;
+  UINTN                     Len;
+
+  if (EFI_ERROR (gBS->LocateHandleBuffer (ByProtocol, &gEfiBlockIoProtocolGuid,
+                                          NULL, &Count, &Handles))) {
+    FastbootFail ("no BlockIo handles");
+    return;
+  }
+  for (i = 0; i < Count; i++) {
+    if (EFI_ERROR (gBS->HandleProtocol (Handles[i], &gEfiBlockIoProtocolGuid, (VOID **)&Bio))) {
+      continue;
+    }
+    AsciiSPrint (Line, sizeof (Line), "#%u rm=%d lp=%d bs=%u blocks=%lu", (UINT32)i,
+                 Bio->Media->RemovableMedia, Bio->Media->LogicalPartition,
+                 Bio->Media->BlockSize, (UINT64)Bio->Media->LastBlock + 1);
+    FastbootInfo (Line);
+    WaitForTransferComplete ();
+    Text = NULL;
+    if (!EFI_ERROR (gBS->HandleProtocol (Handles[i], &gEfiDevicePathProtocolGuid, (VOID **)&Dp))) {
+      Text = ConvertDevicePathToText (Dp, FALSE, TRUE);
+    }
+    if (Text == NULL) {
+      continue;
+    }
+    /* device paths are long: send in chunks */
+    Len = StrLen (Text);
+    for (Off = 0; Off < Len; Off += sizeof (Line) - 3) {
+      AsciiSPrint (Line, sizeof (Line), "  %s", Text + Off);
+      FastbootInfo (Line);
+      WaitForTransferComplete ();
+    }
+    FreePool (Text);
+  }
+  FreePool (Handles);
+  FastbootOkay ("");
+}
+
+
+/* fastboot oem esp-peek <blkio#> <lba>: hex dump of the first 512 bytes of
+   one block (blkio# as listed by oem esp-blkio). Read-only. */
+STATIC VOID
+CmdOemEspPeek (CONST CHAR8 *Arg, VOID *Data, UINT32 Size)
+{
+  EFI_HANDLE             *Handles = NULL;
+  UINTN                  Count = 0;
+  UINTN                  Idx;
+  UINT64                 Lba;
+  EFI_BLOCK_IO_PROTOCOL  *Bio;
+  UINT8                  *Buf;
+  CHAR8                  Line[MAX_RSP_SIZE - 5];
+  UINTN                  i, j, o;
+  CONST CHAR8            *P = Arg;
+
+  while (*P == ' ') P++;
+  Idx = AsciiStrDecimalToUintn (P);
+  while (*P >= '0' && *P <= '9') P++;
+  while (*P == ' ') P++;
+  Lba = AsciiStrDecimalToUint64 (P);
+
+  if (EFI_ERROR (gBS->LocateHandleBuffer (ByProtocol, &gEfiBlockIoProtocolGuid, NULL, &Count, &Handles)) ||
+      Idx >= Count ||
+      EFI_ERROR (gBS->HandleProtocol (Handles[Idx], &gEfiBlockIoProtocolGuid, (VOID **)&Bio))) {
+    FastbootFail ("usage: oem esp-peek <blkio#> <lba>");
+    return;
+  }
+  Buf = AllocatePool (Bio->Media->BlockSize);
+  if (Buf == NULL ||
+      EFI_ERROR (Bio->ReadBlocks (Bio, Bio->Media->MediaId, Lba, Bio->Media->BlockSize, Buf))) {
+    FastbootFail ("read failed");
+    if (Buf != NULL) FreePool (Buf);
+    FreePool (Handles);
+    return;
+  }
+  for (i = 0; i < 512 && i < Bio->Media->BlockSize; i += 16) {
+    o = AsciiSPrint (Line, sizeof (Line), "%03x:", (UINT32)i);
+    for (j = 0; j < 16; j++) {
+      o += AsciiSPrint (Line + o, sizeof (Line) - o, "%02x", Buf[i + j]);
+    }
+    o += AsciiSPrint (Line + o, sizeof (Line) - o, " ");
+    for (j = 0; j < 16 && o + 1 < sizeof (Line); j++) {
+      Line[o++] = (Buf[i + j] >= 0x20 && Buf[i + j] < 0x7f) ? Buf[i + j] : '.';
+    }
+    Line[o] = '\0';
+    FastbootInfo (Line);
+    WaitForTransferComplete ();
+  }
+  FreePool (Buf);
+  FreePool (Handles);
+  FastbootOkay ("");
+}
+
+
+/* fastboot oem esp-memmap: print the UEFI memory map (type, start, pages,
+   attributes), one INFO line per descriptor. Read-only. */
+STATIC VOID
+CmdOemEspMemmap (CONST CHAR8 *Arg, VOID *Data, UINT32 Size)
+{
+  EFI_MEMORY_DESCRIPTOR  *Map = NULL;
+  EFI_MEMORY_DESCRIPTOR  *D;
+  UINTN                  MapSize = 0;
+  UINTN                  Key, DescSize;
+  UINT32                 DescVer;
+  EFI_STATUS             Status;
+  CHAR8                  Line[MAX_RSP_SIZE - 5];
+  UINTN                  Off;
+
+  Status = gBS->GetMemoryMap (&MapSize, Map, &Key, &DescSize, &DescVer);
+  if (Status != EFI_BUFFER_TOO_SMALL) {
+    FastbootFail ("GetMemoryMap failed");
+    return;
+  }
+  MapSize += 8 * DescSize;
+  Map = AllocatePool (MapSize);
+  if (Map == NULL ||
+      EFI_ERROR (gBS->GetMemoryMap (&MapSize, Map, &Key, &DescSize, &DescVer))) {
+    FastbootFail ("GetMemoryMap failed");
+    if (Map != NULL) FreePool (Map);
+    return;
+  }
+  for (Off = 0; Off < MapSize; Off += DescSize) {
+    D = (EFI_MEMORY_DESCRIPTOR *)((UINT8 *)Map + Off);
+    AsciiSPrint (Line, sizeof (Line), "t=%u %09lx +%lx a=%lx",
+                 D->Type, D->PhysicalStart, D->NumberOfPages, D->Attribute);
+    FastbootInfo (Line);
+    WaitForTransferComplete ();
+  }
+  FreePool (Map);
+  FastbootOkay ("");
+}
+
+/* fastboot oem esp-log: stream the in-RAM boot log (EspLog) as INFO lines. */
+STATIC VOID
+CmdOemEspLog (CONST CHAR8 *Arg, VOID *Data, UINT32 Size)
+{
+  UINTN       Len;
+  BOOLEAN     Wrapped;
+  CONST CHAR8 *Log = EspLogData (&Len, &Wrapped);
+  CHAR8       Line[MAX_RSP_SIZE - 5];
+  UINTN       i = 0;
+  UINTN       n = 0;
+
+  if (Wrapped) {
+    FastbootInfo ("[esp-log] (older messages dropped)");
+    WaitForTransferComplete ();
+  }
+  for (i = 0; i < Len; i++) {
+    if (Log[i] == '\n' || n == sizeof (Line) - 1) {
+      Line[n] = '\0';
+      FastbootInfo (Line);
+      WaitForTransferComplete ();
+      n = 0;
+      if (Log[i] == '\n') {
+        continue;
+      }
+    }
+    Line[n++] = (Log[i] == '\t') ? ' ' : Log[i];
+  }
+  if (n > 0) {
+    Line[n] = '\0';
+    FastbootInfo (Line);
+    WaitForTransferComplete ();
+  }
+  FastbootOkay ("");
+}
+
 STATIC EFI_STATUS
 FastbootCommandSetup (IN VOID *Base, IN UINT64 Size)
 {
@@ -3989,6 +4216,12 @@ FastbootCommandSetup (IN VOID *Base, IN UINT64 Size)
 #if HIBERNATION_SUPPORT_NO_AES
       {"oem golden-snapshot", CmdGoldenSnapshot},
 #endif
+      {"oem set-gpu-preemption", CmdOemSetGpuPreemption},
+      {"oem set-hw-fence-value", CmdOemSetHwFence},
+      {"oem esp-log", CmdOemEspLog},
+      {"oem esp-blkio", CmdOemEspBlkio},
+      {"oem esp-peek", CmdOemEspPeek},
+      {"oem esp-memmap", CmdOemEspMemmap},
       {"continue", CmdContinue},
       {"reboot", CmdReboot},
       {"reboot-bootloader", CmdRebootBootloader},

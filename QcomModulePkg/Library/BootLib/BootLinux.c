@@ -33,6 +33,7 @@
  * Changes from Qualcomm Innovation Center are provided under the following license:
  *
  * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Modified for FreeABL, 2026 (see FREEABL.md).
  *
  *  Redistribution and use in source and binary forms, with or without
  *  modification, are permitted (subject to the limitations in the
@@ -86,6 +87,7 @@
 #include <Protocol/EFIPlatformInfoTypes.h>
 #include "libfdt.h"
 #include "Bootconfig.h"
+#include <Library/KeyPad.h>
 #include <ufdt_overlay.h>
 
 #ifndef DISABLE_KERNEL_PROTOCOL
@@ -1885,24 +1887,27 @@ BootLinux (BootInfo *Info)
 
   if ((Status != EFI_SUCCESS) ||
       (KernIntf == NULL)) {
-    DEBUG ((EFI_D_ERROR, "Error getting kernel stack protocol. Error %r\n",
+    /* ESP: older firmware (AYN Odin SDM845, Mangmi Pocket Max SM8250...)
+       has no kernel protocol; their stock ABLs boot the classic way
+       (caches/MMU off, jump). Do the same instead of failing the boot. */
+    DEBUG ((EFI_D_INFO, "No kernel stack protocol (%r): classic kernel handoff\n",
            Status));
-    goto Exit;
-  }
+    KernIntf = NULL;
+  } else {
+    if (KernIntf->Version >= EFI_KERNEL_PROTOCOL_VERSION) {
+      ThreadNum = KernIntf->Thread->GetCurrentThread ();
+      StackCurrent = KernIntf->Thread->ThreadGetUnsafeSPCurrent (ThreadNum);
+      StackBase = KernIntf->Thread->ThreadGetUnsafeSPBase (ThreadNum);
+    }
 
-  if (KernIntf->Version >= EFI_KERNEL_PROTOCOL_VERSION) {
-    ThreadNum = KernIntf->Thread->GetCurrentThread ();
-    StackCurrent = KernIntf->Thread->ThreadGetUnsafeSPCurrent (ThreadNum);
-    StackBase = KernIntf->Thread->ThreadGetUnsafeSPBase (ThreadNum);
-  }
+    DataSize = sizeof (KernelSizeReserved);
+    Status = gRT->GetVariable ((CHAR16 *)L"KernelSize", &gQcomTokenSpaceGuid,
+                                 NULL, &DataSize, &KernelSizeReserved);
 
-  DataSize = sizeof (KernelSizeReserved);
-  Status = gRT->GetVariable ((CHAR16 *)L"KernelSize", &gQcomTokenSpaceGuid,
-                               NULL, &DataSize, &KernelSizeReserved);
-
-  if (Status != EFI_SUCCESS) {
-    DEBUG ((EFI_D_INFO, "Failed to get size of kernel region\n"));
-    return Status;
+    if (Status != EFI_SUCCESS) {
+      DEBUG ((EFI_D_INFO, "Failed to get size of kernel region\n"));
+      return Status;
+    }
   }
 #endif
 
@@ -1910,6 +1915,38 @@ BootLinux (BootInfo *Info)
     SetLinuxBootCpu (BootCpuId);
   }
 
+#ifdef ESP_DEBUG_CONOUT
+  /* Debug builds: summary (+ on the device, ESP_DEBUG_PAUSE: wait for Power)
+     before the jump, so the last
+     ABL state can be read on screen (the panel stays on afterwards). */
+  {
+    UINT32 Key = SCAN_NULL;
+    UINT32 Ms;
+    AsciiPrint ("\nESPDBG handoff=%a kernel=0x%lx dtb=0x%lx ramdisk=0x%lx dtbo_idx=%d verity=%a\n",
+#ifndef DISABLE_KERNEL_PROTOCOL
+                KernIntf ? "kernel-protocol" : "classic",
+#else
+                "classic(build)",
+#endif
+                (UINT64)BootParamlistPtr.KernelLoadAddr,
+                (UINT64)BootParamlistPtr.DeviceTreeLoadAddr,
+                (UINT64)BootParamlistPtr.RamdiskLoadAddr,
+                GetDtboIdx (), IsEnforcing () ? "enforcing" : "eio");
+#ifdef ESP_DEBUG_PAUSE
+    AsciiPrint ("ESPDBG press Power to start the kernel (60 s)\n");
+    MicroSecondDelay (500000);
+    for (Ms = 0; Ms < 60000; Ms += 50) {
+      if (GetKeyPress (&Key) == EFI_SUCCESS && Key == SCAN_SUSPEND) {
+        break;
+      }
+      MicroSecondDelay (50000);
+    }
+#else
+    (VOID)Key;
+    (VOID)Ms;
+#endif
+  }
+#endif
   DEBUG ((EFI_D_INFO, "\nShutting Down UEFI Boot Services: %lu ms\n",
           GetTimerCountms ()));
   /*Shut down UEFI boot services*/
@@ -1924,6 +1961,9 @@ BootLinux (BootInfo *Info)
 #ifdef DISABLE_KERNEL_PROTOCOL
   PreparePlatformHardware ();
 #else
+  if (KernIntf == NULL) {
+    EspPreparePlatformHardwareClassic ();
+  } else
   PreparePlatformHardware (KernIntf, (VOID *)BootParamlistPtr.KernelLoadAddr,
                   (UINTN)KernelSizeReserved,
                   (VOID *)BootParamlistPtr.RamdiskLoadAddr,
@@ -1932,6 +1972,10 @@ BootLinux (BootInfo *Info)
                   (VOID *)StackCurrent, (UINTN)StackBase);
 #endif
   BootStatsSetTimeStamp (BS_BL_END);
+
+  if (IsVmEnabled ()) {
+    DisableHypUartUsageForLogging ();
+  }
 
   //
   // Start the Linux Kernel
@@ -2446,6 +2490,23 @@ BOOLEAN EarlyServicesEnabled (VOID)
 #ifdef BUILD_USES_RECOVERY_AS_BOOT
 BOOLEAN IsBuildUseRecoveryAsBoot (VOID)
 {
+  /* ESP: one build for several devices. Recovery-as-boot only applies when
+     the device has no recovery partition (AYN Odin). With a
+     separate recovery (Mangmi Pocket Max, Android 13), the boot ramdisk is a
+     plain first-stage ramdisk: force_normal_boot / recovery-as-boot handling
+     would make first-stage init switch into an empty /first_stage_ramdisk. */
+  STATIC CONST CHAR16 *Names[] = { L"recovery", L"recovery_a", L"recovery_b" };
+  UINT32 PtnCount = 0;
+  INT32  PtnIdx;
+  UINTN  i;
+
+  GetPartitionCount (&PtnCount);
+  for (i = 0; i < ARRAY_SIZE (Names); i++) {
+    PtnIdx = GetPartitionIndex ((CHAR16 *)Names[i]);
+    if (PtnIdx != INVALID_PTN && PtnIdx < PtnCount) {
+      return FALSE;
+    }
+  }
   return TRUE;
 }
 #else

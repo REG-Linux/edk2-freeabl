@@ -73,16 +73,24 @@
 	LIBRARY_CLASS                  = BootLib
 
 [BuildOptions]
-	GCC:*_*_*_CC_FLAGS = $(LLVM_ENABLE_SAFESTACK) $(LLVM_SAFESTACK_USE_PTR) $(LLVM_SAFESTACK_COLORING)
+	GCC:*_*_*_CC_FLAGS = $(LLVM_ENABLE_SAFESTACK) $(LLVM_SAFESTACK_USE_PTR) $(LLVM_SAFESTACK_COLORING) -Oz
 
 [BuildOptions.AARCH64]
-	GCC:*_*_*_CC_FLAGS = $(SDLLVM_COMPILE_ANALYZE) $(SDLLVM_ANALYZE_REPORT)
+	GCC:*_*_*_CC_FLAGS = -Oz $(SDLLVM_COMPILE_ANALYZE) $(SDLLVM_ANALYZE_REPORT)
 	GCC:*_*_*_CC_FLAGS = $(UBSAN_UEFI_GCC_FLAG_UNDEFINED)
 	GCC:*_*_*_CC_FLAGS = $(UBSAN_UEFI_GCC_FLAG_ALIGNMENT)
 	GCC:*_*_*_CC_FLAGS = $(PVMFW_BCC_ENABLED)
 	GCC:*_*_*_CC_FLAGS = $(PVMFW_USE_DUMMY_BCC)
 
 [Sources]
+  BootEsp.c
+  EspTrace.c
+  BootDispatch.c
+  BootModeMenu.c
+  EspFeatures.c
+  EspCmdlineFile.c
+  RawFat.c
+  DistroPartition.c
 	ShutdownServices.c
 	Board.c
 	BootLinux.c
@@ -122,11 +130,14 @@
 	OvmfPkg/OvmfPkg.dec
 
 [LibraryClasses]
+	PrintLib
+	UefiRuntimeServicesTableLib
 	DxeServicesTableLib
 	UefiLib
 	CacheMaintenanceLib
 	Zlib
 	ArmLib
+	ArmSmcLib
 	BaseLib
 	DebugLib
 	DevicePathLib
@@ -145,6 +156,9 @@
 	OpenDice
 
 [Guids]
+  gEfiEndOfDxeEventGroupGuid
+  gBootModeVariableGuid
+  gEfiEventExitBootServicesGuid
 	gEfiFileInfoGuid
 	gEfiSdRemovableGuid
 	gEfiFileSystemInfoGuid
@@ -171,6 +185,11 @@
 	gVirtioMmioTransportGuid
 
 [Protocols]
+	gEfiBlockIo2ProtocolGuid
+	gEfiCpuArchProtocolGuid
+	gEfiGraphicsOutputProtocolGuid
+	gEfiSecurityArchProtocolGuid
+	gEfiSecurity2ArchProtocolGuid
 	gEfiSimpleTextInputExProtocolGuid
 	gEfiBlockIoProtocolGuid
 	gEfiLoadedImageProtocolGuid

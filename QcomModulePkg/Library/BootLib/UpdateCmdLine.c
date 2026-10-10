@@ -34,6 +34,7 @@
   * Changes from Qualcomm Innovation Center are provided under the following
   * license:
   * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+  * Modified for FreeABL, 2026 (see FREEABL.md).
   *
   * Redistribution and use in source and binary forms, with or without
   * modification, are permitted (subject to the limitations in the disclaimer
@@ -89,6 +90,9 @@
 #define MAX_PART_NAME_LEN 40
 STATIC CONST CHAR8 *QSPAPrefix = "androidboot.vendor.qspa.";
 #endif
+#include <Library/EspFeatures.h>
+#include <Library/EspCmdlineFile.h>
+#include <Library/BootModeMenu.h>
 
 #define BOOT_CPU_PARAM_LEN 13
 #define SIZE_OF_DELIM 2
@@ -668,6 +672,8 @@ GetMemoryLimit (VOID *fdt, CHAR8 *MemOffAmt)
   EFI_STATUS Status;
   UINT64 UpdRamPartitionSize = 0;
 
+  /* ESP: bypass memory offlining for full RAM access */
+  goto Unsupported;
   if (IsLEVariant ()) {
     goto Unsupported;
   }
@@ -1738,6 +1744,7 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
   }
 
   /* 1 extra byte for NULL */
+  CmdLineLen += 256; /* ESP cmdline parameters */
   CmdLineLen += 1;
 
   if (IsHibernationEnabled ()) {
@@ -1811,6 +1818,28 @@ UpdateCmdLine (BootParamlist *BootParamlistPtr,
 
   ClearBootConfigList (BootConfigListHead);
   if (*FinalCmdLine) {
+
+  /* ESP custom cmdline parameters.  Only meant for a Linux kernel booted
+     through this CLO path (none today: Linux boots via GRUB, which builds
+     its own command line).  Never added to Android's command line. */
+  if (EspLinuxKernelBoot ()) {
+    CHAR8 EspParams[256];
+    UINT32 EspLen = AppendEspCmdLine (EspParams, sizeof (EspParams));
+    if (EspLen > 0 && *FinalCmdLine) {
+      AsciiStrCatS (*FinalCmdLine, CmdLineLen, EspParams);
+    }
+  }
+
+  /* Optional on-disk cmdline.txt / cmdline-append.txt override.
+     Linux/ESP boot path only (never Android) — must run after the ESP
+     NV-variable params above so a cmdline-append.txt addition lands after
+     them, not before. EspApplyCmdlineFile may free *FinalCmdLine and
+     replace it with a differently-sized heap buffer, so nothing below this
+     point may keep using the original CmdLineLen as its capacity. */
+  if (EspLinuxKernelBoot ()) {
+    EspApplyCmdlineFile (FinalCmdLine);
+  }
+
     DEBUG ((EFI_D_INFO, "Cmdline: %a\n", *FinalCmdLine));
   }
   if (*FinalBootConfig) {

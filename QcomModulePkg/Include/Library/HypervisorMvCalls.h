@@ -29,6 +29,7 @@
  * Changes from Qualcomm Innovation Center are provided under the following license:
  *
  * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Modified for FreeABL, 2026 (see FREEABL.md).
  *
  *  Redistribution and use in source and binary forms, with or without
  *  modification, are permitted (subject to the limitations in the
@@ -96,5 +97,6 @@ typedef struct hyp_boot_info {
 /* SCM call related functions */
 HypBootInfo *GetVmData (VOID);
 BOOLEAN IsVmEnabled (VOID);
+VOID DisableHypUartUsageForLogging (VOID);
 VOID SetVmDisable (VOID);
 EFI_STATUS CheckAndSetVmData (BootParamlist *BootParamlistPtr);

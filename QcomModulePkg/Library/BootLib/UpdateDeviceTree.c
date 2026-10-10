@@ -30,6 +30,7 @@
  * Changes from Qualcomm Innovation Center are provided under the following license:
  *
  * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Modified for FreeABL, 2026 (see FREEABL.md).
  *
  *  Redistribution and use in source and binary forms, with or without
  *  modification, are permitted (subject to the limitations in the
@@ -308,8 +309,21 @@ UpdateSplashMemInfo (VOID *fdt)
   DEBUG ((EFI_D_VERBOSE, "Version=%d\nAddr=0x%08x\nSize=0x%08x\n",
           splashBuf.uVersion, splashBuf.uFrameAddr, splashBuf.uFrameSize));
 
-  /* Get offset of the splash memory reservation node */
+  /* Get offset of the splash memory reservation node.
+   *
+   * Stock CLO only looks for "/reserved-memory/splash_region". Fall back to
+   * "/reserved-memory/cont_splash_region" when the primary node is absent,
+   * so boards whose device tree describes the continuous-splash framebuffer
+   * under the "cont_splash_region" name still hand the splash buffer off to
+   * Linux (simplefb / DRM) instead of powering the display down and losing
+   * the handoff.
+   */
   ret = FdtPathOffset (fdt, "/reserved-memory/splash_region");
+  if (ret < 0) {
+    DEBUG ((EFI_D_INFO,
+            "splash_region absent, trying cont_splash_region fallback\n"));
+    ret = FdtPathOffset (fdt, "/reserved-memory/cont_splash_region");
+  }
   if (ret < 0) {
     DEBUG ((EFI_D_WARN, "Splash region not found in device tree, " \
                         "powering down the display and controller\n"));
@@ -1646,8 +1660,12 @@ OutofUpdateRankChannel:
       DEBUG ((EFI_D_VERBOSE, "Start DT ddr regions update: %lu ms\n",
                           GetTimerCountms ()));
       Status =  AddDDrRegion (fdt);
+      /* ESP: older firmware (e.g. SDM845 / Android 10 XBL) may not have the
+         DDR info protocol at all: skip the optional node, as for an old
+         protocol revision, instead of failing the Android boot. */
       if (Status != EFI_SUCCESS &&
-          Status != EFI_UNSUPPORTED) {
+          Status != EFI_UNSUPPORTED &&
+          Status != EFI_NOT_FOUND) {
         DEBUG ((EFI_D_ERROR,
                 "Failed to update DDR regions info, Status=%r\n", Status));
         return Status;

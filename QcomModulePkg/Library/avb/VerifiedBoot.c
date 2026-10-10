@@ -30,6 +30,7 @@
  * Changes from Qualcomm Innovation Center, Inc. are provided
  * under the following license:
  * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Modified for FreeABL, 2026 (see FREEABL.md).
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
@@ -1858,32 +1859,19 @@ DisplayVerifiedBootScreen (BootInfo *Info)
     }
     break;
   case ORANGE:
-    if (FfbmStr[0] != '\0' && !TargetBuildVariantUser ()) {
-      DEBUG ((EFI_D_VERBOSE, "Device will boot into FFBM mode\n"));
-    } else {
-      Status = DisplayVerifiedBootMenu (DISPLAY_MENU_ORANGE);
-      if (Status == EFI_SUCCESS) {
-        WaitForExitKeysDetection ();
-      } else {
-        DEBUG (
-            (EFI_D_INFO, "Device is unlocked, Skipping boot verification\n"));
-      }
-    }
+    /* ESP: no "bootloader unlocked" warning screen (the stock Odin ABL
+       shows none either). Verification and the orange state passed to
+       TrustZone / the kernel are unchanged. */
+    DEBUG ((EFI_D_INFO, "Device is unlocked (orange), no warning screen\n"));
     break;
   default:
     break;
   }
 
-  /* dm-verity warning */
+  /* dm-verity warning: ESP, no screen either (logged only). */
   if ( !IsEnforcing () &&
        !Info->BootIntoRecovery) {
-      Status = DisplayVerifiedBootMenu (DISPLAY_MENU_EIO);
-      if (Status == EFI_SUCCESS) {
-        WaitForExitKeysDetection ();
-      } else {
-        DEBUG ((EFI_D_INFO, "The dm-verity is not started in restart mode." \
-              "\nWait for 30 seconds before proceeding\n"));
-      }
+    DEBUG ((EFI_D_INFO, "dm-verity is not in restart mode (no warning screen)\n"));
   }
 
   return EFI_SUCCESS;

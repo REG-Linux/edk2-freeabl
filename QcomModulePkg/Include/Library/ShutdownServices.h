@@ -13,6 +13,7 @@
 *  WITHOUT WARRANTIES OR REPRESENTATIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED.
 *
 * Copyright (c) 2017-2018, 2020, The Linux Foundation. All rights reserved.
+* Modified for FreeABL, 2026 (see FREEABL.md).
 *
 * Redistribution and use in source and binary forms, with or without
 * modification, are permitted provided that the following conditions are
@@ -139,6 +140,9 @@ typedef struct {
 // BdsHelper.c
 EFI_STATUS
 ShutdownUefiBootServices (VOID);
+
+/* ESP: classic handoff, runtime fallback without kernel protocol. */
+EFI_STATUS EspPreparePlatformHardwareClassic (VOID);
 
 #ifdef DISABLE_KERNEL_PROTOCOL
 EFI_STATUS

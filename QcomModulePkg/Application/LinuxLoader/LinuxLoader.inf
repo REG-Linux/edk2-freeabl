@@ -110,6 +110,7 @@
 	Lz4Lib
 
 [Guids]
+  gBootModeVariableGuid
 	gEfiFileInfoGuid
 	gArmMpCoreInfoGuid
 	gEfiSdRemovableGuid

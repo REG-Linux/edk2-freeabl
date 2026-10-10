@@ -30,6 +30,7 @@
  * Changes from Qualcomm Innovation Center are provided under the following license:
  *
  * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Modified for FreeABL, 2026 (see FREEABL.md).
  *
  *  Redistribution and use in source and binary forms, with or without
  *  modification, are permitted (subject to the limitations in the
@@ -77,6 +78,8 @@
 #include <Library/BootLinux.h>
 #include <Protocol/EFIVerifiedBoot.h>
 #include <Uefi.h>
+#include <Library/BootModeMenu.h>
+#include <Library/Board.h>
 
 STATIC OPTION_MENU_INFO gMenuInfo;
 
@@ -109,13 +112,13 @@ STATIC MENU_MSG_INFO mFastbootOptionTitle[] = {
      OPTION_ITEM,
      0,
      POWEROFF},
-    {{"Boot to Alternate Slot"},
-      BIG_FACTOR,
-      BGR_RED,
-      BGR_BLACK,
-      OPTION_ITEM,
-      0,
-      ALTERNATESLOT},
+    {{"Change default OS"},
+     BIG_FACTOR,
+     BGR_CYAN,
+     BGR_BLACK,
+     OPTION_ITEM,
+     0,
+     TOGGLE_BOOT_MODE},
 };
 
 STATIC MENU_MSG_INFO mFastbootCommonWarnMsgInfo[] = {
@@ -194,6 +197,34 @@ STATIC MENU_MSG_INFO mFastbootCommonMsgInfo[] = {
     {{"DEVICE STATE - "},
      COMMON_FACTOR,
      BGR_RED,
+     BGR_BLACK,
+     COMMON,
+     0,
+     NOACTION},
+    {{"DEFAULT OS - "},
+     COMMON_FACTOR,
+     BGR_CYAN,
+     BGR_BLACK,
+     COMMON,
+     0,
+     NOACTION},
+    {{"CHIPSET - "},
+     COMMON_FACTOR,
+     BGR_WHITE,
+     BGR_BLACK,
+     COMMON,
+     0,
+     NOACTION},
+    {{"MEMORY - "},
+     COMMON_FACTOR,
+     BGR_WHITE,
+     BGR_BLACK,
+     COMMON,
+     0,
+     NOACTION},
+    {{"STORAGE TYPE - "},
+     COMMON_FACTOR,
+     BGR_WHITE,
      BGR_BLACK,
      COMMON,
      0,
@@ -418,6 +449,45 @@ FastbootMenuShowScreen (OPTION_MENU_INFO *OptionMenuInfo)
           mFastbootCommonMsgInfo[i].Msg, sizeof (mFastbootCommonMsgInfo[i].Msg),
           IsUnlocked () ? "unlocked" : "locked",
           IsUnlocked () ? AsciiStrLen ("unlocked") : AsciiStrLen ("locked"));
+      break;
+    case 8:
+      /* Default OS */
+      AsciiSPrint (mFastbootCommonMsgInfo[i].Msg,
+                   sizeof (mFastbootCommonMsgInfo[i].Msg),
+                   "DEFAULT OS - %a",
+                   GetBootModeLinux () ? "Linux" : "Android");
+      break;
+    case 9:
+      /* Chipset */
+      AsciiSPrint (mFastbootCommonMsgInfo[i].Msg,
+                   sizeof (mFastbootCommonMsgInfo[i].Msg),
+                   "CHIPSET - %a",
+                   GetSocName (BoardPlatformRawChipId ()));
+      break;
+    case 10:
+      /* Memory */
+      {
+        UINT32 RamGB = GetDdrSizeGB ();
+        if (RamGB > 0) {
+          AsciiSPrint (mFastbootCommonMsgInfo[i].Msg,
+                       sizeof (mFastbootCommonMsgInfo[i].Msg),
+                       "MEMORY - %d GB", RamGB);
+        } else {
+          AsciiSPrint (mFastbootCommonMsgInfo[i].Msg,
+                       sizeof (mFastbootCommonMsgInfo[i].Msg),
+                       "MEMORY - N/A");
+        }
+      }
+      break;
+    case 11:
+      /* Storage type */
+      {
+        CHAR8 StorageType[16];
+        GetRootDeviceType (StorageType, sizeof (StorageType));
+        AsciiSPrint (mFastbootCommonMsgInfo[i].Msg,
+                     sizeof (mFastbootCommonMsgInfo[i].Msg),
+                     "STORAGE TYPE - %a", StorageType);
+      }
       break;
     }
 

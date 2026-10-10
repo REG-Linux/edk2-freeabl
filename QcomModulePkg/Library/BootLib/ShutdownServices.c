@@ -18,6 +18,7 @@
  * Changes from Qualcomm Innovation Center are provided under the following license:
  *
  * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Modified for FreeABL, 2026 (see FREEABL.md).
  *
  *  Redistribution and use in source and binary forms, with or without
  *  modification, are permitted (subject to the limitations in the
@@ -112,6 +113,27 @@ EFI_STATUS ShutdownUefiBootServices (VOID)
   } while (EFI_ERROR (Status));
 
   return Status;
+}
+
+/* ESP: classic kernel handoff (caches / MMU off), always built: the
+   runtime fallback when the firmware has no kernel protocol. */
+EFI_STATUS EspPreparePlatformHardwareClassic (VOID)
+{
+  ArmDisableBranchPrediction ();
+
+  /* ArmDisableAllExceptions */
+  ArmDisableInterrupts ();
+  ArmDisableAsynchronousAbort ();
+
+  ArmCleanInvalidateDataCache ();
+  ArmCleanDataCache ();
+  ArmInvalidateInstructionCache ();
+
+  ArmDisableDataCache ();
+  ArmDisableInstructionCache ();
+  ArmDisableMmu ();
+  ArmInvalidateTlb ();
+  return EFI_SUCCESS;
 }
 
 #ifdef DISABLE_KERNEL_PROTOCOL

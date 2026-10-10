@@ -35,6 +35,7 @@
  *
  *  Copyright (c) 2022 - 2025 Qualcomm Innovation Center, Inc. All rights
  *  reserved.
+ *  Modified for FreeABL, 2026 (see FREEABL.md).
  *
  *  Redistribution and use in source and binary forms, with or without
  *  modification, are permitted (subject to the limitations in the
@@ -83,6 +84,10 @@
 #include <Library/HypervisorMvCalls.h>
 #include <Library/UpdateCmdLine.h>
 #include <Protocol/EFICardInfo.h>
+#include <Library/BootEsp.h>
+#include <Library/BootModeMenu.h>
+#include <Library/BootDispatch.h>
+#include <Library/EspLog.h>
 
 #define MAX_APP_STR_LEN 64
 #define MAX_NUM_FS 10
@@ -248,6 +253,117 @@ UINT32 GetBootDeviceType ()
 
  **/
 
+/*
+  Read-only safety check before entering the Android boot path.
+
+  The active slot's "boot" partition must start with an Android boot image
+  header, and its "dtbo" partition, when the partition exists, must start with
+  a DTBO table.  Otherwise the Android path can only fail, and failing there
+  burns A/B retries and may mark the slot unbootable (GPT attribute writes).
+  In that case we go to fastboot instead.  Nothing is written here.
+*/
+STATIC BOOLEAN
+PartitionStartsWith (CHAR16 *Pname, CONST UINT8 *Magic, UINTN MagicLen,
+                     BOOLEAN *Exists)
+{
+  VOID       *Buf;
+  UINT32     Size = EFI_PAGE_SIZE;
+  EFI_STATUS Status;
+  BOOLEAN    Match = FALSE;
+
+  *Exists = FALSE;
+  Buf = AllocatePages (1);
+  if (Buf == NULL) {
+    return FALSE;
+  }
+  Status = LoadImageFromPartition (Buf, &Size, Pname);
+  if (!EFI_ERROR (Status)) {
+    *Exists = TRUE;
+    Match = (CompareMem (Buf, Magic, MagicLen) == 0);
+  } else if (Status != EFI_NO_MEDIA && Status != EFI_NOT_FOUND) {
+    *Exists = TRUE;   /* present but unreadable: treat as invalid */
+  }
+  FreePages (Buf, 1);
+  return Match;
+}
+
+STATIC BOOLEAN
+ActiveSlotLooksBootable (BOOLEAN MultiSlotBoot)
+{
+  STATIC CONST UINT8 BootMagic[] = { 'A', 'N', 'D', 'R', 'O', 'I', 'D', '!' };
+  STATIC CONST UINT8 DtboMagic[] = { 0xD7, 0xB7, 0xAB, 0x1E };
+  CHAR16  BootName[MAX_GPT_NAME_SIZE] = L"boot";
+  CHAR16  DtboName[MAX_GPT_NAME_SIZE] = L"dtbo";
+  BOOLEAN Exists;
+
+  if (MultiSlotBoot) {
+    Slot Cur = GetCurrentSlotSuffix ();
+    StrCatS (BootName, ARRAY_SIZE (BootName), Cur.Suffix);
+    StrCatS (DtboName, ARRAY_SIZE (DtboName), Cur.Suffix);
+  }
+
+  BOOLEAN BootOk;
+  BOOLEAN DtboExists;
+  BOOLEAN DtboOk;
+
+  BootOk = PartitionStartsWith (BootName, BootMagic, sizeof (BootMagic), &Exists);
+  DtboOk = PartitionStartsWith (DtboName, DtboMagic, sizeof (DtboMagic), &DtboExists);
+  if (!BootOk) {
+    EspPrint ("ABL: %s has no Android boot image\n", BootName);
+  }
+  if (DtboExists && !DtboOk) {
+    EspPrint ("ABL: %s is not a valid DTBO image\n", DtboName);
+  }
+  return EspSlotBootable (BootOk, DtboExists, DtboOk);
+}
+
+/* Wait up to TimeoutMs for the power key; returns early on press. */
+STATIC VOID
+WaitPowerKeyOrTimeout (UINT32 TimeoutMs)
+{
+  UINT32 Key;
+  UINT32 Waited;
+
+  for (Waited = 0; Waited < TimeoutMs; Waited += 50) {
+    Key = SCAN_NULL;
+    if (GetKeyPress (&Key) == EFI_SUCCESS && Key == SCAN_SUSPEND) {
+      break;
+    }
+    MicroSecondDelay (50000);
+  }
+}
+
+/*
+  One-shot "boot Android on the next boot" request.  Used when Linux mode
+  finds nothing to boot: SD card init has already disconnected/reconnected
+  the BlockIo handles, so instead of entering the Android path in that state
+  we reboot and let the next boot go straight to Android, skipping the menu
+  and the SD init.  The variable is cleared as soon as it is read, so it
+  can never cause a reboot loop.
+*/
+extern EFI_GUID gBootModeVariableGuid;
+STATIC CHAR16 *mOneShotAndroidVar = L"EspOneShotAndroid";
+
+STATIC BOOLEAN
+TakeOneShotAndroid (VOID)
+{
+  UINT8      Value = 0;
+  UINTN      Size  = sizeof (Value);
+  EFI_STATUS Status;
+
+  Status = gRT->GetVariable (mOneShotAndroidVar, &gBootModeVariableGuid,
+                             NULL, &Size, &Value);
+  if (EFI_ERROR (Status)) {
+    return FALSE;
+  }
+  gRT->SetVariable (mOneShotAndroidVar, &gBootModeVariableGuid,
+                    EFI_VARIABLE_NON_VOLATILE | EFI_VARIABLE_BOOTSERVICE_ACCESS |
+                    EFI_VARIABLE_RUNTIME_ACCESS, 0, NULL);
+  return Value == 1;
+}
+
+
+
 EFI_STATUS EFIAPI  __attribute__ ( (no_sanitize ("safe-stack")))
 LinuxLoaderEntry (IN EFI_HANDLE ImageHandle, IN EFI_SYSTEM_TABLE *SystemTable)
 {
@@ -264,6 +380,9 @@ LinuxLoaderEntry (IN EFI_HANDLE ImageHandle, IN EFI_SYSTEM_TABLE *SystemTable)
   /* set ROT, BootState and VBH only once per boot*/
   BOOLEAN SetRotAndBootStateAndVBH = FALSE;
   BOOLEAN FDRDetected = FALSE;
+
+  /* Record everything printed from here on (read: `fastboot oem esp-log`). */
+  EspLogHookConsole ();
 
   DEBUG ((EFI_D_INFO, "Loader Build Info: %a %a\n", __DATE__, __TIME__));
   DEBUG ((EFI_D_VERBOSE, "LinuxLoader Load Address to debug ABL: 0x%llx\n",
@@ -301,6 +420,7 @@ LinuxLoaderEntry (IN EFI_HANDLE ImageHandle, IN EFI_SYSTEM_TABLE *SystemTable)
     DEBUG ((EFI_D_ERROR, "Initialize the device info failed: %r\n", Status));
     goto stack_guard_update_default;
   }
+  EspPrint ("ABL: DeviceInfo OK\n");
 
   Status = EnumeratePartitions ();
 
@@ -309,6 +429,7 @@ LinuxLoaderEntry (IN EFI_HANDLE ImageHandle, IN EFI_SYSTEM_TABLE *SystemTable)
             Status));
     goto stack_guard_update_default;
   }
+  EspPrint ("ABL: Partitions OK\n");
 
   UpdatePartitionEntries ();
   /*Check for multislot boot support*/
@@ -422,6 +543,36 @@ flashless_boot:
     DEBUG ((EFI_D_ERROR, "Error finding board information: %r\n", Status));
     return Status;
   }
+  EspPrint ("ABL: Board init OK\n");
+
+
+#ifdef ESP_DEBUG_CONOUT
+  /* Boot pause (debug builds): hold power to read the boot messages */
+  EspPrint ("PRESS POWER KEY TO PAUSE BOOT\n\n\n\n");
+  {
+    UINT32 PauseKey = SCAN_NULL;
+    UINT32 PauseMs;
+    for (PauseMs = 0; PauseMs < 1000; PauseMs += 50) {
+      MicroSecondDelay (50000);
+      if (GetKeyPress (&PauseKey) == EFI_SUCCESS && PauseKey == SCAN_SUSPEND) {
+        EspPrint ("PRESS POWER KEY TO CONTINUE\n\n\n\n");
+        /* Wait for power key release then press */
+        MicroSecondDelay (500000);
+        {
+          UINT32 WaitCount;
+          for (WaitCount = 0; WaitCount < 1200; WaitCount++) {
+            PauseKey = SCAN_NULL;
+            if (GetKeyPress (&PauseKey) == EFI_SUCCESS && PauseKey == SCAN_SUSPEND) {
+              break;
+            }
+            MicroSecondDelay (50000);
+          }
+        }
+        break;
+      }
+    }
+  }
+#endif
 
   DEBUG ((EFI_D_INFO, "KeyPress:%u, BootReason:%u\n", KeyPressed, BootReason));
   DEBUG ((EFI_D_INFO, "Fastboot=%d, Recovery:%d\n",
@@ -435,6 +586,69 @@ flashless_boot:
       goto fastboot;
   }
   else {
+    /* ESP boot: routing decisions live in BootDispatch.c (host-tested). */
+    BOOLEAN OneShot = TakeOneShotAndroid ();
+    BOOLEAN MenuLinux = FALSE;
+    BOOLEAN SdInitDone = FALSE;
+    BOOLEAN LinuxNotFound = FALSE;
+
+    for (;;) {
+      if (OneShot) {
+        EspPrint ("ABL: One-shot Android boot (no SD init)\n");
+      } else {
+        /* Big-font boot menu: Linux / Android / Fastboot. Needs no UEFI
+           variable (the Odin firmware does not keep ours). After "Linux not
+           found" it comes back with Android pre-selected. */
+        ESP_BOOT_CHOICE Choice = DisplayBootChoiceMenu (LinuxNotFound);
+        if (Choice == ESP_BOOT_FASTBOOT) {
+          EspPrint ("ABL: Boot menu: Fastboot\n");
+          goto fastboot;
+        }
+        MenuLinux = (Choice == ESP_BOOT_LINUX);
+        EspPrint ("ABL: Boot mode: %a\n", MenuLinux ? "Linux" : "Android");
+      }
+
+      if (EspFirstAction (FALSE, OneShot, MenuLinux) != ESP_ACT_LINUX) {
+        break;   /* Android */
+      }
+
+      if (!SdInitDone) {
+        /* SD card init: disconnect BlockIO, signal GUIDs, reconnect.
+           Linux path only; partitions are rescanned below before going on
+           to Android or fastboot. */
+        EspPrint ("ABL: Selected Linux - initializing SD...\n");
+        /* Only needed for gBS->LoadImage of the EFI app. */
+        EspPrint ("ABL: Installing security hooks...\n");
+        InstallSecurityHooks ();
+        InitSdCard ();
+        SdInitDone = TRUE;
+      }
+      ScanSD ();
+      EspPrint ("ABL: Loading BOOTAA64.EFI...\n");
+      Status = StartEspBootLoader ();
+
+      /* SD init disconnected/reconnected every block device: rescan the
+         partition table so Android / fastboot do not use stale handles. */
+      EnumeratePartitions ();
+      UpdatePartitionEntries ();
+
+      if (!EFI_ERROR (Status)) {
+        /* The EFI app ran and came back: never fall into Android. */
+        EspPrint ("ABL: Linux boot returned - entering fastboot\n");
+        goto fastboot;
+      }
+      EspPrint ("ABL: EFI not found: %r\n", Status);
+      LinuxNotFoundScreen ();
+      LinuxNotFound = TRUE;
+      OneShot = FALSE;
+    }
+
+    /* Android boot path */
+    if (EspAndroidAction (ActiveSlotLooksBootable (MultiSlotBoot)) !=
+        ESP_ACT_ANDROID) {
+      EspPrint ("ABL: Android not bootable on this slot - entering fastboot\n");
+      goto fastboot;
+    }
     BootInfo Info = {0};
     Info.MultiSlotBoot = MultiSlotBoot;
     Info.BootIntoRecovery = BootIntoRecovery;
@@ -444,6 +658,7 @@ flashless_boot:
   #if HIBERNATION_SUPPORT_NO_AES
     BootIntoHibernationImage (&Info, &SetRotAndBootStateAndVBH);
   #endif
+    EspPrint ("ABL: LoadImageAndAuth...\n");
     Status = LoadImageAndAuth (&Info, FALSE, SetRotAndBootStateAndVBH
   #ifndef USE_DUMMY_BCC
                                , &BccParamsRecvdFromAVB
@@ -451,9 +666,13 @@ flashless_boot:
                               );
     if (Status != EFI_SUCCESS) {
       DEBUG ((EFI_D_ERROR, "LoadImageAndAuth failed: %r\n", Status));
+      EspPrint ("ABL: LoadImageAndAuth FAILED: %r\n", Status);
+      EspPrint ("ABL: entering fastboot in 10s (power key: now)\n");
+      WaitPowerKeyOrTimeout (10000);
       goto fastboot;
     }
 
+    EspPrint ("ABL: Booting kernel (partition: %s)...\n", Info.Pname);
     BootLinux (&Info);
   }
 
@@ -468,6 +687,7 @@ fastboot:
     while (1);
   }
   DEBUG ((EFI_D_INFO, "Launching fastboot\n"));
+  EspPrint ("ABL: Entering fastboot mode\n");
   Status = FastbootInitialize ();
   if (EFI_ERROR (Status)) {
     DEBUG ((EFI_D_ERROR, "Failed to Launch Fastboot App: %d\n", Status));

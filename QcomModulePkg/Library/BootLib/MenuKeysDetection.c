@@ -30,6 +30,7 @@
  * Changes from Qualcomm Innovation Center are provided under the following license:
  *
  * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Modified for FreeABL, 2026 (see FREEABL.md).
  *
  *  Redistribution and use in source and binary forms, with or without
  *  modification, are permitted (subject to the limitations in the
@@ -82,6 +83,7 @@
 #include <Uefi.h>
 
 #include <Protocol/EFIVerifiedBoot.h>
+#include <Library/BootModeMenu.h>
 
 STATIC UINT64 StartTimer;
 STATIC EFI_EVENT CallbackKeyDetection;
@@ -201,6 +203,10 @@ UpdateDeviceStatus (OPTION_MENU_INFO *MsgInfo, INTN Reason)
     Status = HandleActiveSlotUnbootable (TRUE);
     DEBUG ((EFI_D_WARN,
           "Reset unbootable slots failed enter fastboot mode\n"));
+    break;
+  case TOGGLE_BOOT_MODE:
+    SetBootModeLinux (!GetBootModeLinux ());
+    RebootDevice (NORMAL_MODE);
     break;
   }
 }
