@@ -1,3 +1,4 @@
+# Modified for FreeABL, 2026 (see FREEABL.md).
 # ESP: DEBUG() messages on screen (debug ABL for the device): make ... ESP_DEBUG_SCREEN=TRUE
 ESP_DEBUG_SCREEN ?= FALSE
 # ESP: power the panel off at ExitBootServices before Linux (per SoC, see build.sh)

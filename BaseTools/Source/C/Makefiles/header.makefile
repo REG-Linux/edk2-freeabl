@@ -6,6 +6,7 @@
 # HOST_ARCH = Arm or ARM for ARM build
 #
 # Copyright (c) 2007 - 2018, Intel Corporation. All rights reserved.<BR>
+# Modified for FreeABL, 2026 (see FREEABL.md).
 # SPDX-License-Identifier: BSD-2-Clause-Patent
 
 ifndef HOST_ARCH

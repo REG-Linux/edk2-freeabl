@@ -28,4 +28,6 @@ verified boot (no warning screens). The commit history shows every change.
 - Files from CodeLinaro / Qualcomm and from TianoCore EDK2 keep their original
   licence notices (BSD-3-Clause, BSD-2-Clause-Patent and others), including
   the ones FreeABL modifies.
+- `EmbeddedPkg/Library/LibUfdt` is AOSP's libufdt, licensed under Apache-2.0
+  (its files carry no headers in the CodeLinaro tree).
 - A built ABL image combines both and is distributed under GPL-3.0-or-later.

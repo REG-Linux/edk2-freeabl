@@ -3,6 +3,10 @@
 #  plus a console capture hook.  Read with `fastboot oem esp-log`.
 #  Based on MdePkg UefiDebugLibConOut.
 #
+#  Copyright (c) 2018, Microsoft Corporation
+#  Copyright (c) 2007 - 2019, Intel Corporation. All rights reserved.<BR>
+#  Copyright (c) 2026, REG-Linux contributors.
+#
 #  SPDX-License-Identifier: BSD-2-Clause-Patent
 ##
 
