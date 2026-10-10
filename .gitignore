@@ -5,3 +5,7 @@ Build/
 __pycache__/
 tags/
 .vscode/
+# build output
+/obj/
+/build_modulepkg.log
+/unsigned_abl.elf
