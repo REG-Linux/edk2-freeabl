@@ -79,7 +79,9 @@
       DebugLib|QcomModulePkg/Library/DebugLib/DebugLib.inf
   !else
       BaseMemoryLibOptDxe|MdePkg/Library/BaseMemoryLibOptDxe/BaseMemoryLibOptDxe.inf
-      DebugLib|MdeModulePkg/Library/PeiDxeDebugLibReportStatusCode/PeiDxeDebugLibReportStatusCode.inf
+      # DEBUG()/ASSERT() go to an in-RAM log, read with `fastboot oem esp-log`.
+      # (QEMU_TEST builds also echo them to the console, see [BuildOptions].)
+      DebugLib|QcomModulePkg/Library/EspDebugLib/EspDebugLib.inf
       ReportStatusCodeLib|MdeModulePkg/Library/DxeReportStatusCodeLib/DxeReportStatusCodeLib.inf
   !endif
   DebugPrintErrorLevelLib|MdeModulePkg/Library/DxeDebugPrintErrorLevelLib/DxeDebugPrintErrorLevelLib.inf
