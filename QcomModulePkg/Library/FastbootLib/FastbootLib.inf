@@ -84,6 +84,8 @@
   FastbootMain.c
   UsbDescriptors.c
   FastbootCmds.c
+  AndroidBuildVars.c
+  AndroidBuildVars.h
 
 [BuildOptions]
   GCC:*_*_*_CC_FLAGS = $(UBSAN_UEFI_GCC_FLAG_UNDEFINED)
@@ -101,6 +103,7 @@
   UefiLib
   PcdLib
   BootLib
+  AvbLib
   StackCanary
   DebugLib
   UbsanLib

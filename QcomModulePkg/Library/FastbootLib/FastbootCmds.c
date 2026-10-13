@@ -117,6 +117,7 @@ found at
 #include "AutoGen.h"
 #include "BootImage.h"
 #include "BootLinux.h"
+#include "AndroidBuildVars.h"
 #include "BootStats.h"
 #include "FastbootCmds.h"
 #include "FastbootMain.h"
@@ -314,6 +315,8 @@ STATIC EFI_STATUS FastbootUnInit (VOID)
   }
   return EFI_SUCCESS;
 }
+
+STATIC ANDROID_BUILD_VARS AndroidBuild;
 
 /* Publish a variable readable by the built-in getvar command
  * These Variables must not be temporary, shallow copies are used.
@@ -4301,6 +4304,19 @@ FastbootCommandSetup (IN VOID *Base, IN UINT64 Size)
   AsciiSPrint (StrSocVersion, sizeof (StrSocVersion), "%x",
                 BoardPlatformChipVersion ());
   FastbootPublishVar ("hw-revision", StrSocVersion);
+
+  /* The Android build on the active slot: the FreeABL flashers keep a stock
+   * ABL backup per build (AndroidBuildVars.c) */
+  ReadAndroidBuildVars (MultiSlotBoot ? GetCurrentSlotSuffix ().Suffix : L"", &AndroidBuild);
+  if (AndroidBuild.OsVersion[0] != '\0') {
+    FastbootPublishVar ("android-os-version", AndroidBuild.OsVersion);
+  }
+  if (AndroidBuild.SecurityPatch[0] != '\0') {
+    FastbootPublishVar ("android-security-patch", AndroidBuild.SecurityPatch);
+  }
+  if (AndroidBuild.VbmetaSha256[0] != '\0') {
+    FastbootPublishVar ("vbmeta-sha256", AndroidBuild.VbmetaSha256);
+  }
 
   if (IsDisableParallelDownloadFlash()) {
     FastbootPublishVar ("parallel-download-flash", "no");
