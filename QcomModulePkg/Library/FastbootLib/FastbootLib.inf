@@ -121,6 +121,7 @@
   gEfiEraseBlockProtocolGuid
   gEfiUbiFlasherProtocolGuid
   gQcomDisplayUtilsProtocolGuid
+  gEfiChipInfoProtocolGuid
 
 [Guids]
   gEfiUfsLU0Guid

@@ -113,6 +113,7 @@ found at
 #include <Protocol/SimpleTextIn.h>
 #include <Protocol/SimpleTextOut.h>
 #include <Protocol/EFIDisplayUtils.h>
+#include <Protocol/EFIChipInfo.h>
 
 #include "AutoGen.h"
 #include "BootImage.h"
@@ -4307,6 +4308,23 @@ FastbootCommandSetup (IN VOID *Base, IN UINT64 Size)
 
   /* The flashers never take this bootloader for the stock one in a backup */
   FastbootPublishVar ("freeabl", "yes");
+
+  /* The chip serial number, as the boot ROM reports it in EDL: the flashers
+   * check a backup belongs to this device */
+  {
+    EFI_CHIPINFO_PROTOCOL *ChipInfo;
+    UINT32 ChipSerial;
+    STATIC CHAR8 StrChipSerial[9];
+
+    if (gBS->LocateProtocol (&gEfiChipInfoProtocolGuid, NULL, (VOID **)&ChipInfo) == EFI_SUCCESS &&
+        ChipInfo->GetSerialNumber (ChipInfo, &ChipSerial) == EFI_SUCCESS) {
+      for (i = 0; i < 8; i++) {
+        StrChipSerial[i] = "0123456789abcdef"[(ChipSerial >> (28 - 4 * i)) & 0xf];
+      }
+      StrChipSerial[8] = '\0';
+      FastbootPublishVar ("chip-serial", StrChipSerial);
+    }
+  }
 
   /* The Android build on the active slot: the FreeABL flashers keep a stock
    * ABL backup per build (AndroidBuildVars.c) */
