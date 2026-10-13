@@ -4305,6 +4305,9 @@ FastbootCommandSetup (IN VOID *Base, IN UINT64 Size)
                 BoardPlatformChipVersion ());
   FastbootPublishVar ("hw-revision", StrSocVersion);
 
+  /* The flashers never take this bootloader for the stock one in a backup */
+  FastbootPublishVar ("freeabl", "yes");
+
   /* The Android build on the active slot: the FreeABL flashers keep a stock
    * ABL backup per build (AndroidBuildVars.c) */
   ReadAndroidBuildVars (MultiSlotBoot ? GetCurrentSlotSuffix ().Suffix : L"", &AndroidBuild);
