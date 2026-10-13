@@ -27,7 +27,9 @@
 
 STATIC CHAR8 OsVersion[16];
 STATIC CHAR8 SecurityPatch[16];
-STATIC CHAR8 VbmetaSha256[2 * AVB_SHA256_DIGEST_SIZE + 1];
+/* A fastboot reply holds 60 characters after "OKAY": the first 16 bytes, in hex */
+#define VBMETA_DIGEST_BYTES 16
+STATIC CHAR8 VbmetaSha256[2 * VBMETA_DIGEST_BYTES + 1];
 
 /* The whole partition (up to Max bytes) in a new pool buffer, or NULL. */
 STATIC UINT8 *
@@ -155,9 +157,12 @@ ReadAndroidBuildVars (IN CONST CHAR16 *Suffix, OUT ANDROID_BUILD_VARS *Vars)
     avb_sha256_init (&Ctx);
     avb_sha256_update (&Ctx, Vb, Size);
     Digest = avb_sha256_final (&Ctx);
-    for (Index = 0; Index < AVB_SHA256_DIGEST_SIZE; Index++) {
-      AsciiSPrint (VbmetaSha256 + 2 * Index, 3, "%02x", Digest[Index]);
+    /* lower case, as the flashers print it (EDK2's %x is upper case) */
+    for (Index = 0; Index < VBMETA_DIGEST_BYTES; Index++) {
+      VbmetaSha256[2 * Index] = "0123456789abcdef"[Digest[Index] >> 4];
+      VbmetaSha256[2 * Index + 1] = "0123456789abcdef"[Digest[Index] & 0xf];
     }
+    VbmetaSha256[2 * VBMETA_DIGEST_BYTES] = '\0';
     CopyProp (Vb, Size, "boot", "os_version", OsVersion, sizeof (OsVersion));
     CopyProp (Vb, Size, "init_boot", "os_version", OsVersion, sizeof (OsVersion));
     CopyProp (Vb, Size, "boot", "security_patch", SecurityPatch, sizeof (SecurityPatch));

@@ -16,7 +16,7 @@
 typedef struct {
   CONST CHAR8 *OsVersion;     /* e.g. "13" */
   CONST CHAR8 *SecurityPatch; /* e.g. "2024-05-05", or "2024-05" from a boot header */
-  CONST CHAR8 *VbmetaSha256;  /* sha256 of the whole vbmeta<suffix> partition, hex */
+  CONST CHAR8 *VbmetaSha256;  /* sha256 of the whole vbmeta<suffix> partition: first 16 bytes, lower-case hex */
 } ANDROID_BUILD_VARS;
 
 VOID
